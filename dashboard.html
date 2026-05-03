@@ -1,0 +1,1445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RenewGrid — Live Energy Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  /* =====================================================================
+     DESIGN SYSTEM — Deep Space / Meteorological Station aesthetic
+     ===================================================================== */
+  :root {
+    --bg-base:      #060b17;
+    --bg-card:      #0d1626;
+    --bg-card2:     #111e34;
+    --border:       rgba(0, 200, 255, 0.12);
+    --border-glow:  rgba(0, 200, 255, 0.35);
+    --solar:        #f59e0b;
+    --solar-dim:    rgba(245, 158, 11, 0.15);
+    --solar-glow:   rgba(245, 158, 11, 0.4);
+    --wind:         #10b981;
+    --wind-dim:     rgba(16, 185, 129, 0.15);
+    --wind-glow:    rgba(16, 185, 129, 0.4);
+    --sky:          #00d4ff;
+    --sky-dim:      rgba(0, 212, 255, 0.12);
+    --sky-glow:     rgba(0, 212, 255, 0.35);
+    --alert:        #f43f5e;
+    --alert-dim:    rgba(244, 63, 94, 0.15);
+    --predict:      #a78bfa;
+    --predict-dim:  rgba(167, 139, 250, 0.15);
+    --text-1:       #e8f4f8;
+    --text-2:       #7fa8c0;
+    --text-3:       #3d6480;
+    --font-display: 'Orbitron', monospace;
+    --font-mono:    'Space Mono', monospace;
+    --radius:       16px;
+    --radius-sm:    10px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    overflow-x: hidden;
+  }
+
+  /* Animated starfield background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 25% 60%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 45% 30%, rgba(255,255,255,0.5) 0%, transparent 100%),
+      radial-gradient(1px 1px at 65% 80%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.4) 0%, transparent 100%),
+      radial-gradient(1px 1px at 90% 55%, rgba(255,255,255,0.3) 0%, transparent 100%),
+      radial-gradient(1px 1px at 55% 90%, rgba(255,255,255,0.2) 0%, transparent 100%),
+      radial-gradient(1px 1px at 35% 45%, rgba(255,255,255,0.3) 0%, transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Horizon glow */
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 300px;
+    background: linear-gradient(to top,
+      rgba(0, 80, 120, 0.18) 0%,
+      transparent 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* =====================================================================
+     LAYOUT
+     ===================================================================== */
+  .app {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 0;
+  }
+
+  /* ---- Header ---- */
+  header {
+    padding: 20px 28px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: rgba(6, 11, 23, 0.7);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--solar), var(--wind));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 0 20px var(--solar-glow);
+  }
+
+  .logo-text {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-1);
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .clock {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--sky);
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px var(--sky-glow);
+  }
+
+  .date-str {
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+    text-align: right;
+    margin-top: 2px;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--alert);
+    box-shadow: 0 0 8px var(--alert);
+    transition: all 0.4s ease;
+    animation: pulse-red 2s infinite;
+  }
+  .status-dot.online {
+    background: var(--wind);
+    box-shadow: 0 0 8px var(--wind-glow);
+    animation: pulse-green 2s infinite;
+  }
+  @keyframes pulse-red {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 8px var(--wind-glow); }
+    50%     { box-shadow: 0 0 18px var(--wind-glow); }
+  }
+
+  .status-label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    color: var(--text-3);
+  }
+
+  /* ---- Status bar ---- */
+  .statusbar {
+    padding: 8px 28px;
+    background: rgba(13, 22, 38, 0.6);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+  }
+  .statusbar span { color: var(--sky); }
+
+  /* ---- Main grid ---- */
+  main {
+    padding: 24px 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 360px;
+    grid-template-rows: auto auto auto;
+    gap: 18px;
+    align-items: start;
+  }
+
+  /* ---- Footer log ---- */
+  footer {
+    padding: 0 28px 24px;
+  }
+
+  /* =====================================================================
+     CARDS
+     ===================================================================== */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-glow), transparent);
+  }
+
+  .card-solar  { border-color: rgba(245,158,11,0.2); }
+  .card-solar::before  { background: linear-gradient(90deg, transparent, var(--solar-glow), transparent); }
+  .card-wind   { border-color: rgba(16,185,129,0.2); }
+  .card-wind::before   { background: linear-gradient(90deg, transparent, var(--wind-glow), transparent); }
+  .card-sky    { border-color: var(--border); }
+  .card-alert  { border-color: rgba(244,63,94,0.25); }
+  .card-alert::before  { background: linear-gradient(90deg, transparent, rgba(244,63,94,0.5), transparent); }
+  .card-predict { border-color: rgba(167,139,250,0.25); }
+  .card-predict::before { background: linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent); }
+
+  /* Card label */
+  .card-label {
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 3px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .solar-dot   { background: var(--solar); box-shadow: 0 0 6px var(--solar); }
+  .wind-dot    { background: var(--wind);  box-shadow: 0 0 6px var(--wind); }
+  .sky-dot     { background: var(--sky);   box-shadow: 0 0 6px var(--sky); }
+  .alert-dot   { background: var(--alert); box-shadow: 0 0 6px var(--alert); }
+  .predict-dot { background: var(--predict); box-shadow: 0 0 6px var(--predict); }
+
+  /* =====================================================================
+     SOLAR CARD
+     ===================================================================== */
+  .solar-main {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 20px;
+  }
+
+  .sun-orb {
+    width: 80px; height: 80px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .sun-core {
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff5c0 0%, var(--solar) 60%, rgba(245,158,11,0) 100%);
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 30px var(--solar), 0 0 60px rgba(245,158,11,0.3);
+    animation: sun-breathe 3s ease-in-out infinite;
+  }
+
+  @keyframes sun-breathe {
+    0%,100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 30px var(--solar); }
+    50%     { transform: translate(-50%, -50%) scale(1.08); box-shadow: 0 0 45px var(--solar), 0 0 80px rgba(245,158,11,0.3); }
+  }
+
+  .sun-rays {
+    width: 80px; height: 80px;
+    position: absolute;
+    top: 0; left: 0;
+    animation: sun-rotate 20s linear infinite;
+  }
+
+  .sun-rays::before, .sun-rays::after {
+    content: '';
+    position: absolute;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(245,158,11,0.25);
+    top: 0; left: 0;
+  }
+  .sun-rays::after {
+    width: 90%; height: 90%;
+    top: 5%; left: 5%;
+    border-color: rgba(245,158,11,0.15);
+    animation: sun-rotate 12s linear infinite reverse;
+  }
+
+  @keyframes sun-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  .solar-stats { flex: 1; }
+
+  .big-value {
+    font-family: var(--font-display);
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .big-unit {
+    font-size: 14px;
+    font-weight: 400;
+    margin-left: 4px;
+    opacity: 0.6;
+  }
+
+  .big-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+
+  .mini-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .mini-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mini-val {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .mini-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--text-3);
+  }
+
+  /* Irradiance bar */
+  .irr-bar-wrap {
+    margin-top: 16px;
+  }
+
+  .irr-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .solar-fill { background: linear-gradient(90deg, #f59e0b, #fcd34d); box-shadow: 0 0 8px var(--solar); }
+  .wind-fill  { background: linear-gradient(90deg, #10b981, #6ee7b7); box-shadow: 0 0 8px var(--wind); }
+
+  /* =====================================================================
+     WIND CARD
+     ===================================================================== */
+  .wind-main {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 20px;
+  }
+
+  .compass-wrap {
+    width: 80px; height: 80px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .compass-ring {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(16,185,129,0.3);
+    position: absolute;
+    top: 0; left: 0;
+    box-shadow: inset 0 0 20px rgba(16,185,129,0.05), 0 0 15px rgba(16,185,129,0.1);
+  }
+
+  .compass-ring::before {
+    content: 'N';
+    position: absolute;
+    top: 4px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: var(--wind);
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+
+  .compass-needle {
+    width: 2px; height: 28px;
+    background: linear-gradient(to bottom, var(--wind), transparent);
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg);
+    transition: transform 1.2s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: 0 0 6px var(--wind);
+  }
+
+  .compass-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--wind);
+    box-shadow: 0 0 10px var(--wind);
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .turbine-anim {
+    position: absolute;
+    bottom: 6px; right: 6px;
+    font-size: 18px;
+    animation: turbine-spin 2s linear infinite;
+    display: inline-block;
+  }
+
+  @keyframes turbine-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* Speed arc */
+  .speed-arc {
+    margin-top: 14px;
+    position: relative;
+  }
+
+  .speed-svg { width: 100%; height: 60px; }
+
+  /* =====================================================================
+     GRID TOTAL CARD
+     ===================================================================== */
+  .grid-card {
+    grid-column: 1 / 3;
+  }
+
+  .grid-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .grid-total {
+    text-align: center;
+  }
+
+  .grid-total .big-value {
+    font-size: 48px;
+    color: var(--sky);
+    text-shadow: 0 0 30px var(--sky-glow);
+  }
+
+  .grid-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .flow-icon { font-size: 16px; }
+
+  .flow-bar-wrap { flex: 1; }
+
+  .flow-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .session-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .session-stat {
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+
+  .session-val {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .session-lbl {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: var(--text-3);
+  }
+
+  /* =====================================================================
+     RIGHT COLUMN (alerts + predictions)
+     ===================================================================== */
+  .right-col {
+    grid-row: 1 / 4;
+    grid-column: 3 / 4;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* Alerts */
+  .alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .alert-list::-webkit-scrollbar { width: 4px; }
+  .alert-list::-webkit-scrollbar-track { background: transparent; }
+  .alert-list::-webkit-scrollbar-thumb { background: rgba(244,63,94,0.3); border-radius: 2px; }
+
+  .alert-item {
+    background: var(--alert-dim);
+    border: 1px solid rgba(244,63,94,0.2);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    animation: slide-in 0.3s ease;
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .alert-source {
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--alert);
+  }
+
+  .alert-time {
+    font-size: 9px;
+    color: var(--text-3);
+  }
+
+  .alert-reason {
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .alert-val {
+    font-size: 10px;
+    color: var(--text-3);
+    margin-top: 2px;
+  }
+
+  .alert-dismiss {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-3);
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .alert-dismiss:hover {
+    border-color: var(--alert);
+    color: var(--alert);
+  }
+
+  .alert-item.system-alert .alert-dismiss:hover {
+    border-color: #818cf8;
+    color: #818cf8;
+  }
+
+  .alert-item.resolving {
+    animation: alert-fade-out 0.4s ease forwards;
+  }
+
+  @keyframes alert-fade-out {
+    0%   { opacity: 1; transform: translateX(0);    max-height: 120px; margin-bottom: 8px; }
+    60%  { opacity: 0; transform: translateX(20px); max-height: 120px; }
+    100% { opacity: 0; transform: translateX(20px); max-height: 0;     margin-bottom: 0; padding: 0; }
+  }
+
+  /* Clear log button */
+  .clear-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    padding: 3px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: var(--font-display);
+    transition: all 0.2s ease;
+  }
+
+  .clear-btn:hover {
+    border-color: var(--sky);
+    color: var(--sky);
+    box-shadow: 0 0 8px rgba(0,212,255,0.2);
+  }
+  .alert-item.system-alert {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
+  .alert-item.system-alert .alert-source {
+    color: #818cf8;
+  }
+
+  .alert-item.system-alert .alert-reason {
+    color: #c7d2fe;
+  }
+
+  .no-alerts {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-3);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  /* Predictions */
+  .predict-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .predict-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--predict-dim);
+    border: 1px solid rgba(167,139,250,0.15);
+    border-radius: var(--radius-sm);
+  }
+
+  .predict-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-3);
+  }
+
+  .predict-value {
+    font-family: var(--font-display);
+    font-size: 16px;
+    color: var(--predict);
+    font-weight: 600;
+    text-shadow: 0 0 12px rgba(167,139,250,0.5);
+  }
+
+  .predict-unit {
+    font-size: 10px;
+    opacity: 0.6;
+    margin-left: 3px;
+  }
+
+  /* =====================================================================
+     MESSAGE LOG
+     ===================================================================== */
+  .log-card {
+    overflow: hidden;
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .log-body {
+    max-height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-track { background: transparent; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border-glow); border-radius: 2px; }
+
+  .log-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.02);
+    font-size: 11px;
+    animation: log-appear 0.25s ease;
+    border-left: 2px solid transparent;
+  }
+
+  @keyframes log-appear {
+    from { opacity: 0; background: rgba(0,212,255,0.08); }
+    to   { opacity: 1; background: rgba(255,255,255,0.02); }
+  }
+
+  .log-row.solar-log  { border-left-color: var(--solar); }
+  .log-row.wind-log   { border-left-color: var(--wind); }
+  .log-row.alert-log  { border-left-color: var(--alert); background: rgba(244,63,94,0.05); }
+  .log-row.irr-log    { border-left-color: rgba(245,158,11,0.5); }
+  .log-row.ws-log     { border-left-color: rgba(16,185,129,0.5); }
+  .log-row.system-log { border-left-color: #818cf8; background: rgba(99,102,241,0.05); }
+
+  .log-time  { color: var(--text-3); flex-shrink: 0; font-size: 10px; }
+  .log-topic { color: var(--sky); flex-shrink: 0; min-width: 140px; font-size: 10px; letter-spacing: 0.5px; }
+  .log-data  { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* =====================================================================
+     FLASH EFFECT on update
+     ===================================================================== */
+  .flash {
+    animation: flash-update 0.5s ease;
+  }
+
+  @keyframes flash-update {
+    0%   { background: rgba(0,212,255,0.15); }
+    100% { background: transparent; }
+  }
+
+  /* =====================================================================
+     MISC UTILITIES
+     ===================================================================== */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    font-family: var(--font-display);
+  }
+
+  .tag-count {
+    background: rgba(0,212,255,0.1);
+    color: var(--sky);
+    border: 1px solid rgba(0,212,255,0.2);
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-family: var(--font-display);
+  }
+
+  .offline-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6,11,23,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    backdrop-filter: blur(6px);
+    transition: opacity 0.5s ease;
+  }
+
+  .offline-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .offline-box {
+    text-align: center;
+    padding: 40px 60px;
+    background: var(--bg-card);
+    border: 1px solid rgba(244,63,94,0.3);
+    border-radius: var(--radius);
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  .offline-icon { font-size: 48px; margin-bottom: 16px; }
+
+  .offline-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: var(--alert);
+    margin-bottom: 8px;
+  }
+
+  .offline-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Offline overlay -->
+<div class="offline-overlay" id="offlineOverlay">
+  <div class="offline-box">
+    <div class="offline-icon">⚡</div>
+    <div class="offline-title">CONNECTING TO BROKER</div>
+    <div class="offline-sub">Make sure broker.py and publishers are running</div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ================================================================
+       HEADER
+       ================================================================ -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🌿</div>
+      <div>
+        <div class="logo-text">RENEWGRID</div>
+        <div class="logo-sub">LIVE ENERGY MONITORING SYSTEM</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div style="text-align:right">
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="date-str" id="dateStr">---</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div class="status-dot" id="statusDot"></div>
+        <div class="status-label" id="statusLabel">OFFLINE</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Status bar -->
+  <div class="statusbar" id="statusBar">
+    ◈ Waiting for broker connection...
+  </div>
+
+  <!-- ================================================================
+       MAIN
+       ================================================================ -->
+  <main>
+
+    <!-- SOLAR CARD -->
+    <div class="card card-solar">
+      <div class="card-label">
+        <span class="dot solar-dot"></span>
+        SOLAR — PV NODE 01
+      </div>
+      <div class="solar-main">
+        <div class="sun-orb">
+          <div class="sun-rays"></div>
+          <div class="sun-core" id="sunCore"></div>
+        </div>
+        <div class="solar-stats">
+          <div class="big-value" id="solarKwh" style="color:var(--solar)">
+            —<span class="big-unit">kWh</span>
+          </div>
+          <div class="big-label">ENERGY OUTPUT</div>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <div class="mini-val" id="solarIrr" style="color:var(--solar)">—</div>
+              <div class="mini-label">W/M² IRR</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="solarTemp" style="color:#fbbf24">—</div>
+              <div class="mini-label">°C TEMP</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="solarHum" style="color:#60a5fa">—</div>
+              <div class="mini-label">% HUM</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="irr-bar-wrap">
+        <div class="irr-bar-label">
+          <span>IRRADIANCE</span>
+          <span id="solarIrrPct">0%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill solar-fill" id="solarBar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIND CARD -->
+    <div class="card card-wind">
+      <div class="card-label">
+        <span class="dot wind-dot"></span>
+        WIND — TURBINE NODE 01
+      </div>
+      <div class="wind-main">
+        <div class="compass-wrap">
+          <div class="compass-ring"></div>
+          <div class="compass-needle" id="compassNeedle"></div>
+          <div class="compass-dot"></div>
+          <div class="turbine-anim" id="turbineAnim">⊕</div>
+        </div>
+        <div class="solar-stats">
+          <div class="big-value" id="windKwh" style="color:var(--wind)">
+            —<span class="big-unit">kWh</span>
+          </div>
+          <div class="big-label">ENERGY OUTPUT</div>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <div class="mini-val" id="windSpeed" style="color:var(--wind)">—</div>
+              <div class="mini-label">M/S SPEED</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="windDir" style="color:#34d399">—</div>
+              <div class="mini-label">° DIR</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-val" id="windCF" style="color:#6ee7b7">—</div>
+              <div class="mini-label">CAP FACTOR</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="irr-bar-wrap">
+        <div class="irr-bar-label">
+          <span>CAPACITY FACTOR</span>
+          <span id="windCFPct">0%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill wind-fill" id="windBar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <!-- Alerts -->
+      <div class="card card-alert">
+        <div class="card-label" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="dot alert-dot"></span>
+            SYSTEM ALERTS
+          </div>
+          <span class="tag-count" id="alertCount">0</span>
+        </div>
+        <div class="alert-list" id="alertList">
+          <div class="no-alerts">No alerts — all systems nominal</div>
+        </div>
+      </div>
+
+      <!-- ANN Predictions -->
+      <div class="card card-predict">
+        <div class="card-label">
+          <span class="dot predict-dot"></span>
+          ANN PREDICTIONS
+        </div>
+        <div class="predict-list">
+          <div class="predict-row">
+            <div>
+              <div class="predict-label">SOLAR PREDICTION</div>
+              <div style="font-size:9px;color:var(--text-3);margin-top:2px">weather/irradiance input</div>
+            </div>
+            <div class="predict-value" id="predSolar">—<span class="predict-unit">kWh</span></div>
+          </div>
+          <div class="predict-row">
+            <div>
+              <div class="predict-label">WIND PREDICTION</div>
+              <div style="font-size:9px;color:var(--text-3);margin-top:2px">weather/wind_speed input</div>
+            </div>
+            <div class="predict-value" id="predWind">—<span class="predict-unit">kWh</span></div>
+          </div>
+          <div style="padding:8px 12px;background:rgba(167,139,250,0.05);border-radius:8px;border:1px solid rgba(167,139,250,0.1)">
+            <div style="font-size:9px;color:var(--text-3);letter-spacing:1px;margin-bottom:4px">ANN ENGINE STATUS</div>
+            <div style="font-size:11px;color:var(--predict)" id="annStatus">Waiting for ann subscriber...</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- GRID TOTAL CARD -->
+    <div class="card card-sky grid-card">
+      <div class="card-label">
+        <span class="dot sky-dot"></span>
+        GRID — SESSION TOTALS
+      </div>
+      <div class="grid-inner">
+
+        <div class="grid-total">
+          <div class="big-value" id="gridTotal">
+            0.0000<span class="big-unit">kWh</span>
+          </div>
+          <div class="big-label" style="color:var(--sky)">COMBINED OUTPUT</div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text-3)">
+            <span id="msgCount">0</span> messages received
+          </div>
+        </div>
+
+        <div class="grid-flow">
+          <div class="flow-row">
+            <span class="flow-icon">☀️</span>
+            <div class="flow-bar-wrap">
+              <div class="flow-label">
+                <span>SOLAR</span>
+                <span id="solarTotal" style="color:var(--solar)">0.0000 kWh</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill solar-fill" id="solarTotalBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="flow-row">
+            <span class="flow-icon">💨</span>
+            <div class="flow-bar-wrap">
+              <div class="flow-label">
+                <span>WIND</span>
+                <span id="windTotal" style="color:var(--wind)">0.0000 kWh</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill wind-fill" id="windTotalBar" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="session-stats">
+          <div class="session-stat">
+            <div class="session-val" id="lastSolarTime" style="color:var(--solar)">—</div>
+            <div class="session-lbl">LAST SOLAR</div>
+          </div>
+          <div class="session-stat">
+            <div class="session-val" id="lastWindTime" style="color:var(--wind)">—</div>
+            <div class="session-lbl">LAST WIND</div>
+          </div>
+          <div class="session-stat">
+            <div class="session-val" id="alertTotal" style="color:var(--alert)">0</div>
+            <div class="session-lbl">ALERTS</div>
+          </div>
+          <div class="session-stat">
+            <div class="session-val" id="hourDisplay" style="color:var(--sky)">—</div>
+            <div class="session-lbl">HOUR</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================================================================
+       LIVE LOG FOOTER
+       ================================================================ -->
+  <footer>
+    <div class="card log-card">
+      <div class="log-header">
+        <div class="card-label" style="margin-bottom:0">
+          <span class="dot sky-dot"></span>
+          LIVE MESSAGE LOG
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="tag-count" id="logCount">0 msgs</span>
+          <button class="clear-btn" onclick="clearLog()">CLEAR</button>
+        </div>
+      </div>
+      <div class="log-body" id="logBody">
+        <!-- rows injected here -->
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  
+  // STATE
+
+  const state = {
+    solarTotal: 0,
+    windTotal:  0,
+    msgCount:   0,
+    alertCount: 0,
+    connected:  false,
+    logCount:   0
+  };
+
+  function clearLog() {
+    const body = document.getElementById('logBody');
+    // Fade out all rows then remove
+    Array.from(body.children).forEach((row, i) => {
+      row.style.transition = `opacity 0.2s ease ${i * 0.02}s`;
+      row.style.opacity = '0';
+    });
+    setTimeout(() => {
+      body.innerHTML = '';
+      state.logCount = 0;
+      document.getElementById('logCount').textContent = '0 msgs';
+    }, 300);
+  }
+
+ 
+  // CLOCK
+  
+  function updateClock() {
+    const now  = new Date();
+    const hh   = String(now.getHours()).padStart(2,'0');
+    const mm   = String(now.getMinutes()).padStart(2,'0');
+    const ss   = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('clock').textContent = `${hh}:${mm}:${ss}`;
+    document.getElementById('dateStr').textContent =
+      now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }).toUpperCase();
+    document.getElementById('hourDisplay').textContent = `${hh}:00`;
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // HELPERS
+
+  function flash(el) {
+    el.classList.remove('flash');
+    void el.offsetWidth; // reflow
+    el.classList.add('flash');
+  }
+
+  function fmt(val, decimals=4) {
+    if (val === null || val === undefined) return '—';
+    return Number(val).toFixed(decimals);
+  }
+
+  function pct(val, max) {
+    return Math.min(100, Math.max(0, (val / max) * 100)).toFixed(1);
+  }
+
+ 
+  // SOLAR UPDATE
+ 
+  function updateSolar(data) {
+    const kwh = data.energy_kwh ?? 0;
+    const irr = data.irradiance ?? 0;
+
+    document.getElementById('solarKwh').innerHTML  = `${fmt(kwh,4)}<span class="big-unit">kWh</span>`;
+    document.getElementById('solarIrr').textContent = fmt(irr,1);
+    document.getElementById('solarTemp').textContent = fmt(data.temperature,1);
+    document.getElementById('solarHum').textContent  = fmt(data.humidity,1);
+
+    const irrPct = pct(irr, 1000);
+    document.getElementById('solarBar').style.width = irrPct + '%';
+    document.getElementById('solarIrrPct').textContent = irrPct + '%';
+
+    // Brighten sun when irradiance is high
+    const brightness = 0.3 + (irr / 1000) * 0.7;
+    document.getElementById('sunCore').style.opacity = brightness;
+
+    state.solarTotal += kwh;
+    document.getElementById('solarTotal').textContent = fmt(state.solarTotal, 4) + ' kWh';
+    document.getElementById('lastSolarTime').textContent = data.time || '—';
+
+    updateGridTotal();
+    flash(document.querySelector('.card-solar'));
+  }
+
+  
+  // WIND UPDATE
+ 
+  function updateWind(data) {
+    const kwh   = data.energy_kwh ?? 0;
+    const speed = data.wind_speed ?? 0;
+    const cf    = data.capacity_factor ?? 0;
+    const dir   = data.direction ?? 0;
+
+    document.getElementById('windKwh').innerHTML   = `${fmt(kwh,4)}<span class="big-unit">kWh</span>`;
+    document.getElementById('windSpeed').textContent = fmt(speed,1);
+    document.getElementById('windDir').textContent   = fmt(dir,0);
+    document.getElementById('windCF').textContent    = fmt(cf,3);
+
+    const cfPct = pct(cf, 1);
+    document.getElementById('windBar').style.width  = cfPct + '%';
+    document.getElementById('windCFPct').textContent = cfPct + '%';
+
+    // Rotate compass needle
+    document.getElementById('compassNeedle').style.transform =
+      `translateX(-50%) rotate(${dir}deg)`;
+
+    // Spin speed proportional to wind
+    const spinDuration = Math.max(0.3, 3 - speed * 0.2);
+    document.getElementById('turbineAnim').style.animationDuration = spinDuration + 's';
+
+    state.windTotal += kwh;
+    document.getElementById('windTotal').textContent = fmt(state.windTotal, 4) + ' kWh';
+    document.getElementById('lastWindTime').textContent = data.time || '—';
+
+    updateGridTotal();
+    flash(document.querySelector('.card-wind'));
+  }
+
+  
+  // GRID TOTAL
+ 
+  function updateGridTotal() {
+    const total = state.solarTotal + state.windTotal;
+    document.getElementById('gridTotal').innerHTML =
+      `${fmt(total,4)}<span class="big-unit">kWh</span>`;
+
+    const maxForBar = Math.max(total, 1);
+    document.getElementById('solarTotalBar').style.width =
+      pct(state.solarTotal, maxForBar) + '%';
+    document.getElementById('windTotalBar').style.width =
+      pct(state.windTotal, maxForBar) + '%';
+  }
+
+  
+  // ALERTS
+  
+  function dismissAlert(btn) {
+    const item = btn.closest('.alert-item');
+    item.classList.add('resolving');
+    // Remove from DOM after animation completes
+    setTimeout(() => {
+      item.remove();
+      // If no alerts left, restore placeholder
+      const list = document.getElementById('alertList');
+      if (list.children.length === 0) {
+        list.innerHTML = '<div class="no-alerts">No active alerts</div>';
+      }
+    }, 420);
+  }
+
+  function addAlert(data) {
+    const isSystem = data.type === 'system';
+    state.alertCount++;
+    document.getElementById('alertCount').textContent = state.alertCount;
+    document.getElementById('alertTotal').textContent = state.alertCount;
+
+    const list = document.getElementById('alertList');
+    const placeholder = list.querySelector('.no-alerts');
+    if (placeholder) placeholder.remove();
+
+    const el = document.createElement('div');
+    el.className = isSystem ? 'alert-item system-alert' : 'alert-item';
+
+    const icon   = isSystem ? '🔌' : '⚠️';
+    const label  = isSystem ? 'NODE OFFLINE' : (data.source || 'UNKNOWN').toUpperCase();
+    const reason = (data.reason || 'alert').replace(/_/g, ' ').toUpperCase();
+    const detail = isSystem
+      ? data.value || ''
+      : `Value: ${data.value ?? '—'} | Threshold: ${data.threshold ?? '—'}`;
+
+    el.innerHTML = `
+      <div class="alert-header">
+        <span class="alert-source">${icon} ${label}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="alert-time">${data.time || ''}</span>
+          <button class="alert-dismiss" onclick="dismissAlert(this)">RESOLVE ✕</button>
+        </div>
+      </div>
+      <div class="alert-reason">${reason}</div>
+      <div class="alert-val">${detail}</div>
+    `;
+    list.insertBefore(el, list.firstChild);
+    while (list.children.length > 10) list.removeChild(list.lastChild);
+  }
+
+  // LOG
+
+  function addLog(entry) {
+    state.msgCount++;
+    state.logCount++;
+    document.getElementById('msgCount').textContent = state.msgCount;
+    document.getElementById('logCount').textContent = state.logCount + ' msgs';
+
+    const topic = entry.topic || '';
+    const data  = entry.data  || {};
+    const time  = entry.time  || '';
+
+    const cls = topic.startsWith('solar')        ? 'solar-log'
+              : topic.startsWith('wind')         ? 'wind-log'
+              : topic.startsWith('alert')        ? 'alert-log'
+              : topic.startsWith('weather/irr')  ? 'irr-log'
+              : topic.startsWith('system')       ? 'system-log'
+              : 'ws-log';
+
+    // Compact data summary
+    let summary = '';
+    if (data.energy_kwh !== undefined)  summary += `${fmt(data.energy_kwh,3)}kWh `;
+    if (data.irradiance  !== undefined) summary += `irr=${fmt(data.irradiance,0)}W/m² `;
+    if (data.wind_speed  !== undefined) summary += `wind=${fmt(data.wind_speed,1)}m/s `;
+    if (data.temperature !== undefined) summary += `temp=${fmt(data.temperature,1)}°C `;
+    if (data.reason      !== undefined) summary += `⚠ ${data.reason} `;
+    if (!summary) summary = JSON.stringify(data).substring(0,60);
+
+    const row = document.createElement('div');
+    row.className = `log-row ${cls}`;
+    row.innerHTML = `
+      <span class="log-time">${time}</span>
+      <span class="log-topic">${topic}</span>
+      <span class="log-data">${summary.trim()}</span>
+    `;
+
+    const body = document.getElementById('logBody');
+    body.insertBefore(row, body.firstChild);
+    while (body.children.length > 30) body.removeChild(body.lastChild);
+  }
+
+  
+  // IRRADIANCE / WIND_SPEED (for ANN predictions panel)
+ 
+  function updateIrradiance(data) {
+    // These come from the ANN subscriber re-publishing — just show them
+    // as "features received" since the ANN model runs in subscriber.py
+    document.getElementById('annStatus').textContent =
+      `Features received @ ${data.time} — ann subscriber processing`;
+    document.getElementById('predSolar').innerHTML =
+      `<i style="font-size:11px;color:var(--text-3)">via ann subscriber</i>`;
+  }
+
+  function updateWindSpeed(data) {
+    document.getElementById('annStatus').textContent =
+      `Features received @ ${data.time} — ann subscriber processing`;
+    document.getElementById('predWind').innerHTML =
+      `<i style="font-size:11px;color:var(--text-3)">via ann subscriber</i>`;
+  }
+
+
+  // SSE CONNECTION
+
+  function setOnline(online, msg) {
+    const dot   = document.getElementById('statusDot');
+    const label = document.getElementById('statusLabel');
+    const bar   = document.getElementById('statusBar');
+    const overlay = document.getElementById('offlineOverlay');
+
+    if (online) {
+      dot.classList.add('online');
+      label.textContent = 'LIVE';
+      bar.innerHTML = `◈ <span>BROKER CONNECTED</span> — streaming all topics in real time`;
+      overlay.classList.add('hidden');
+    } else {
+      dot.classList.remove('online');
+      label.textContent = 'OFFLINE';
+      bar.innerHTML = `◈ ${msg || 'Disconnected — attempting reconnect...'}`;
+      overlay.classList.remove('hidden');
+    }
+  }
+
+  function connectSSE() {
+    const es = new EventSource('/stream');
+
+    es.addEventListener('snapshot', e => {
+      const snap = JSON.parse(e.data);
+      if (snap.connected) setOnline(true);
+      if (snap.solar)  updateSolar(snap.solar);
+      if (snap.wind)   updateWind(snap.wind);
+      if (snap.alerts) snap.alerts.slice().reverse().forEach(addAlert);
+      if (snap.messages) snap.messages.slice().reverse().forEach(addLog);
+    });
+
+    es.addEventListener('solar',      e => { updateSolar(JSON.parse(e.data));      addLog({topic:'solar/output',      data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('wind',       e => { updateWind(JSON.parse(e.data));       addLog({topic:'wind/output',       data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('alert',        e => { addAlert(JSON.parse(e.data));         addLog({topic:'alerts/low_output', data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('system_alert', e => { addAlert(JSON.parse(e.data));         addLog({topic:'system/status',     data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('irradiance', e => { updateIrradiance(JSON.parse(e.data)); addLog({topic:'weather/irradiance',data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('wind_speed', e => { updateWindSpeed(JSON.parse(e.data));  addLog({topic:'weather/wind_speed',data:JSON.parse(e.data), time:JSON.parse(e.data).time}); });
+    es.addEventListener('status',     e => {
+      const d = JSON.parse(e.data);
+      setOnline(d.connected, d.message);
+    });
+
+    es.onerror = () => setOnline(false, 'SSE connection lost — retrying...');
+  }
+
+  connectSSE();
+</script>
+</body>
+</html>
